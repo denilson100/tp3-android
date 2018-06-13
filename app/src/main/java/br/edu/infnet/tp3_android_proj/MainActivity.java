@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
 import android.provider.Telephony;
+import android.speech.tts.TextToSpeech;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
@@ -27,6 +28,7 @@ import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,7 +40,8 @@ import br.edu.infnet.tp3_android_proj.util.ServiceMapa;
 import fr.quentinklein.slt.LocationTracker;
 import fr.quentinklein.slt.TrackerSettings;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements TextToSpeech.OnInitListener,
+        TextToSpeech.OnUtteranceCompletedListener {
 
     MapView mMapView;
     private GoogleMap googleMap;
@@ -48,10 +51,20 @@ public class MainActivity extends AppCompatActivity {
     private SmsBroadcastReceiver mIntentReceiver;
     public static final String OTP_REGEX = "[0-9]{1,6}";
 
+    private TextToSpeech tts = null;
+    private String msg = "";
+    private String numero;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        if (getIntent() != null) {
+            Intent startingIntent = this.getIntent();
+            msg = startingIntent.getStringExtra("MESSAGE");
+            tts = new TextToSpeech(this, this);
+        }
 
         coordinatorLayout = (CoordinatorLayout) findViewById(R.id.coordinatorLayout);
 
@@ -175,4 +188,26 @@ public class MainActivity extends AppCompatActivity {
         snackbar.show();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (tts!=null) {
+            tts.shutdown();
+        }
+    }
+
+    @Override
+    public void onInit(int status) {
+
+        Locale locale = new Locale("pt_BR");
+        tts.setLanguage(locale);
+        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
+    }
+
+    @Override
+    public void onUtteranceCompleted(String utteranceId) {
+        tts.shutdown();
+        tts = null;
+        finish();
+    }
 }
