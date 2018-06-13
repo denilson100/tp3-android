@@ -1,22 +1,25 @@
 package br.edu.infnet.tp3_android_proj;
 
 import android.Manifest;
-import android.content.DialogInterface;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
-import android.support.annotation.NonNull;
+import android.provider.Telephony;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.telephony.SmsMessage;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
@@ -24,6 +27,12 @@ import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import br.edu.infnet.tp3_android_proj.interfaces.SmsListener;
+import br.edu.infnet.tp3_android_proj.util.Permissions;
+import br.edu.infnet.tp3_android_proj.util.SmsBroadcastReceiver;
 import br.edu.infnet.tp3_android_proj.util.PermissoesRunTime;
 import br.edu.infnet.tp3_android_proj.util.ServiceMapa;
 import fr.quentinklein.slt.LocationTracker;
@@ -35,6 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private GoogleMap googleMap;
     private LocationTracker tracker;
     private CoordinatorLayout coordinatorLayout;
+
+    private SmsBroadcastReceiver mIntentReceiver;
+    public static final String OTP_REGEX = "[0-9]{1,6}";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
                             != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MainActivity.this,
                             Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                         Log.d("TAG", "Sem Permissao");
-                        if (verifyPermissionLocation() != true) {
+                        if (verifyPermission() != true) {
                             alertSemPermissao();
                         }
                         return;
@@ -73,7 +85,6 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
             }
         });
 
@@ -115,13 +126,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public boolean verifyPermissionLocation(){
+    public boolean verifyPermission(){
         // Verifica permissao, se nao tiver vai para activity de permissao
         boolean permissao;
         int permissionCheckLocation = ContextCompat.checkSelfPermission(MainActivity.this,
                 Manifest.permission.ACCESS_FINE_LOCATION);
 
-        if(permissionCheckLocation != PackageManager.PERMISSION_GRANTED){
+        int permissionSMS = ContextCompat.checkSelfPermission(MainActivity.this,
+                Manifest.permission.READ_SMS);
+
+        if(permissionCheckLocation != PackageManager.PERMISSION_GRANTED && permissionSMS != PackageManager.PERMISSION_GRANTED){
             permissao = false;
         } else {
             permissao = true;
@@ -133,7 +147,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        if (verifyPermissionLocation() != true) {
+        if (verifyPermission() != true) {
             alertSemPermissao();
         } else {
             zoomInPosition();
@@ -142,14 +156,11 @@ public class MainActivity extends AppCompatActivity {
 
     public void alertSemPermissao() {
         Snackbar snackbar = Snackbar
-                .make(coordinatorLayout, "Precisamos de acesso a sua localização", Snackbar.LENGTH_LONG)
+                .make(coordinatorLayout, "Precisamos de algumas permissões.", Snackbar.LENGTH_LONG)
                 .setAction("PERMISSÃO", new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        if (verifyPermissionLocation() != true) {
-                            Intent intent = new Intent(MainActivity.this, PermissoesRunTime.class);
-                            startActivity(intent);
-                        }
+                        Permissions.verifyPermissions(MainActivity.this);
                     }
                 });
 
@@ -163,4 +174,5 @@ public class MainActivity extends AppCompatActivity {
         snackbar.setDuration(Snackbar.LENGTH_INDEFINITE);
         snackbar.show();
     }
+
 }

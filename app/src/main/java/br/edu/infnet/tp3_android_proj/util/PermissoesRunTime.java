@@ -24,12 +24,22 @@ public class PermissoesRunTime extends IntroActivity {
 
         addSlide(new SimpleSlide.Builder()
                 .title("Permissão de acesso a localização")
-                .description("Precisamos desta informação para para determinadas funcões no app.")
+                .description("Precisamos desta informação para determinadas funcões no app.")
                 .image(R.drawable.pin_512)
                 .background(R.color.branco)
                 .backgroundDark(R.color.colorPrimaryDark)
                 .scrollable(false)
                 .permission(Manifest.permission.ACCESS_FINE_LOCATION)
+                .build());
+
+        addSlide(new SimpleSlide.Builder()
+                .title("Permissão ler SMS")
+                .description("Precisamos desta informação para informar a mensagem que chegou.")
+                .image(R.drawable.sms_512)
+                .background(R.color.branco)
+                .backgroundDark(R.color.colorPrimaryDark)
+                .scrollable(false)
+                .permission(Manifest.permission.READ_SMS)
                 .build());
 
     }
