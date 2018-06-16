@@ -1,4 +1,4 @@
-package br.edu.infnet.tp3_android_proj;
+package br.edu.infnet.tp3_android_proj.activity;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
@@ -8,8 +8,9 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
-import android.provider.Telephony;
+import android.net.Uri;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.support.design.widget.CoordinatorLayout;
 import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
@@ -19,6 +20,7 @@ import android.os.Bundle;
 import android.telephony.SmsMessage;
 import android.util.Log;
 import android.view.View;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,14 +31,13 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-import br.edu.infnet.tp3_android_proj.interfaces.SmsListener;
+import br.edu.infnet.tp3_android_proj.R;
+import br.edu.infnet.tp3_android_proj.util.AddressUtil;
+import br.edu.infnet.tp3_android_proj.util.Alerts;
 import br.edu.infnet.tp3_android_proj.util.Permissions;
-import br.edu.infnet.tp3_android_proj.util.SmsBroadcastReceiver;
-import br.edu.infnet.tp3_android_proj.util.PermissoesRunTime;
 import br.edu.infnet.tp3_android_proj.util.ServiceMapa;
+import br.edu.infnet.tp3_android_proj.util.SmsUltil;
 import fr.quentinklein.slt.LocationTracker;
 import fr.quentinklein.slt.TrackerSettings;
 
@@ -47,26 +48,27 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
     private GoogleMap googleMap;
     private LocationTracker tracker;
     private CoordinatorLayout coordinatorLayout;
-
-    private SmsBroadcastReceiver mIntentReceiver;
-    public static final String OTP_REGEX = "[0-9]{1,6}";
+    private Switch mSwirch;
 
     private TextToSpeech tts = null;
-    private String msg = "";
-    private String numero;
+    private String msgCompleta = "";
+    private String number;
+
+    public static int INTENT_TEXT_SPEECH_CODE = 11;
+    public static boolean STATUS_NAO_PERTUBE;
+    private BroadcastReceiver receiver;
+    private LatLng latLng;
+
+    public static String MSG_CUSTOMIZADA = "Estou ocupado no momento!"; // menssagem sera custumozada pleo usuario.
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        if (getIntent() != null) {
-            Intent startingIntent = this.getIntent();
-            msg = startingIntent.getStringExtra("MESSAGE");
-            tts = new TextToSpeech(this, this);
-        }
-
         coordinatorLayout = (CoordinatorLayout) findViewById(R.id.coordinatorLayout);
+        mSwirch = (Switch) findViewById(R.id.myswitch);
 
         mMapView = (MapView) findViewById(R.id.mapView);
         mMapView.onCreate(savedInstanceState);
@@ -101,6 +103,55 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
             }
         });
 
+        // Instacia um receptor de SMS
+        receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if ( MainActivity.STATUS_NAO_PERTUBE == true) {
+                    if (intent.getAction().equals("android.provider.Telephony.SMS_RECEIVED")) {
+                        Bundle bundle = intent.getExtras();           //---get the SMS message passed in---
+                        SmsMessage[] msgs = null;
+                        String msg_from = null;
+                        if (bundle != null) {
+                            //---retrieve the SMS message received---
+                            try {
+                                Object[] pdus = (Object[]) bundle.get("pdus");
+                                msgs = new SmsMessage[pdus.length];
+                                String msgBody = null;
+                                for (int i = 0; i < msgs.length; i++) {
+                                    msgs[i] = SmsMessage.createFromPdu((byte[]) pdus[i]);
+                                    msg_from = msgs[i].getOriginatingAddress();
+                                    msgBody = msgs[i].getMessageBody();
+                                    Log.d("TAG", "MSG: " + msgBody);
+                                    Toast toast = Toast.makeText(context, "De: " + msg_from + " MSG: " + msgBody, Toast.LENGTH_LONG);
+                                    toast.show();
+                                }
+
+                                // Monta a mensagem com o numero
+                                msgCompleta = "Você recebeu uma mensagem de: " + msg_from + ", dizendo: " + msgBody;
+                                number = msg_from;
+
+                                // Inicia um intent para falar a string
+                                Intent checkIntent = new Intent();
+                                checkIntent.setAction(TextToSpeech.Engine.ACTION_CHECK_TTS_DATA);
+                                startActivityForResult(checkIntent, INTENT_TEXT_SPEECH_CODE);
+
+                            } catch (Exception e) {
+                                Log.d("Exception caught", e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+    }
+
+    public void falar() {
+        tts = new TextToSpeech(this, this);
+        Locale locale = new Locale("pt_BR");
+        tts.setLanguage(locale);
+        tts.speak(msgCompleta, TextToSpeech.QUEUE_FLUSH, null);
     }
 
     public void zoomInPosition() {
@@ -119,15 +170,15 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
                 double longitude = location.getLongitude();
 
                 LatLng loc = new LatLng(latitude, longitude);
+                latLng = loc;
                 ServiceMapa.posicaoCameraMapa(googleMap, loc);
+                Log.d("TAG", "Location updade");
             }
 
             @Override
             public void onTimeout() {
 
             }
-
-
         };
         if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission
@@ -165,6 +216,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         } else {
             zoomInPosition();
         }
+
+        // Inicia o filtro
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("android.provider.Telephony.SMS_RECEIVED");
+        this.registerReceiver(this.receiver, filter);
+    }
+
+    public void onPause() {
+        super.onPause();
+
+        this.unregisterReceiver(this.receiver);
     }
 
     public void alertSemPermissao() {
@@ -196,12 +258,17 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         }
     }
 
+    /**
+     * Iniciado quando uma intent TTS é chamada
+     * @param status
+     */
     @Override
     public void onInit(int status) {
 
         Locale locale = new Locale("pt_BR");
         tts.setLanguage(locale);
-        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null);
+        tts.speak(msgCompleta, TextToSpeech.QUEUE_FLUSH, null);
+        mensagemDeResposta();
     }
 
     @Override
@@ -209,5 +276,28 @@ public class MainActivity extends AppCompatActivity implements TextToSpeech.OnIn
         tts.shutdown();
         tts = null;
         finish();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == INTENT_TEXT_SPEECH_CODE) {
+            tts = new TextToSpeech(this, this);
+        }
+    }
+
+    public void mensagemDeResposta() {
+        String address = AddressUtil.getAddress(this, latLng);
+        String msg = "Msg de resposta ex: \n" + MSG_CUSTOMIZADA + "\n" + "Estou no endereço: " + address;
+        Alerts.toast(this, msg);
+    }
+
+    public void clickSwitch(View view) {
+        if (mSwirch.isChecked()) {
+            Alerts.showSnackbar(this, "Modo não pertube ativo");
+            STATUS_NAO_PERTUBE = true;
+        } else {
+            Alerts.showSnackbar(this, "Modo não pertube desativado");
+            STATUS_NAO_PERTUBE = false;
+        }
     }
 }
